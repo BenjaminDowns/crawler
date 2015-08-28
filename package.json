@@ -1,0 +1,22 @@
+{
+  "name": "dmexco_crawler",
+  "version": "0.0.1",
+  "description": "Crawler to grab firm information",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "crawler",
+    "hacker"
+  ],
+  "author": "Benjamin Downs",
+  "license": "ISC",
+  "dependencies": {
+    "crawler": "^0.4.3",
+    "fs": "0.0.2",
+    "ini": "^1.3.4",
+    "minimist": "^1.2.0",
+    "url": "^0.11.0"
+  }
+}
