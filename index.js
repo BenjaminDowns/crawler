@@ -4,94 +4,109 @@ var Crawler = require("crawler");
 var url = require('url');
 var ini = require('ini');
 var fs = require('fs');
-// var mysql = require('mysql');
+var mysql = require('mysql');
 var argv = require('minimist')(process.argv.slice(2));
 var env = argv.e;
 
-var companies = [];
-
-
-
+var allTheThings = [];
 var nextExhibitor = null;
 var lastExhibitor = null;
 var nextCrawlSite = null;
 var firstPage = true;
-var c = new Crawler({
-  maxConnections: 5,
-  forceUTF8: true,
-  // This will be called for each crawled page
-  callback: function(error, result, $) {
-    //Case Overview-Page
-    if (error) {
-      console.log(error);
-      return;
-    } else {
-      if (firstPage) {
-        var i = 0
-        $('a.search_index_active').each(function(index, item) {
-          var nextCrawlSite = item.attribs.href
-          if (i < 23) {
-            c.queue(nextCrawlSite);
-            // console.log("\n\n" + i + ") " + nextCrawlSite)
-            i++
-          } else {
-            console.log("\n\n done queueing \n\n")
-          }
-        });
-        firstPage = false
-      }
-      $('td.Adresse').each(function(index, item) {
-        console.log("getting exhibitor page")
-        var nextExhibitor = "https://service.dmexco.de" + item.children[0].next.attribs.href
-        c.queue(nextExhibitor);
-      })
-      $('div.c581').each(function(index, item) {
-        var companyName = ''
-        var nameRegex = /<strong>(.*)<\/strong>/
-        companyName = companyName.replace(nameRegex)
-      })
-    }
+
+var dbConfig = {
+  host     : "127.0.0.1",
+  port      : "8889",
+  user     : "ibc",
+  password : "ibc",
+  database : "ibc"
+}
+
+var connection = mysql.createConnection(dbConfig);
+
+connection.connect(function(err) {
+  if (err) {
+    console.error('error connecting: ' + err.stack);
+    return;
   }
-});
+
+  console.log('connected as id ' + connection.threadId);
+
+
+  var c = new Crawler({
+    maxConnections: 7,
+    forceUTF8: true,
+    // This will be called for each crawled page
+    callback: function(error, result, $) {
+      //Case Overview-Page
+      if (error) {
+        console.log(error);
+        return;
+      } else {
+        if (firstPage) {
+          console.log("Gathering first page links")
+          var i = 0
+          $('a.search_index_active').each(function(index, item) {
+            nextCrawlSite = "https://service.dmexco.de" + item.attribs.href
+            if (i < 23) {
+              c.queue(nextCrawlSite);
+              i++
+            } 
+          });
+          firstPage = false
+        }
+
+        if ($("td.Adresse").length > 0) {
+          console.log("Gathering companies")
+          $("td.Adresse").each(function(index, item) {
+            var nextCompany = "https://service.dmexco.de" + item.children[0].next.attribs.href
+            c.queue(nextCompany);
+          })
+        }
+
+        if ($('.ausstellerReiter').length > 0) {
+          // console.log("Found the appropriate ul class.....")
+          $("a:contains('Ausstellerkategorien')").each(function(index, item) {
+            var companyCategoriesPage = "https://service.dmexco.de" + item.attribs.href
+            c.queue(companyCategoriesPage);
+          })
+        }
+
+        if ($('dd').length > 0) {
+          var companyInfo = {
+            name: '',
+            categories: [],
+            url: ''
+          }
+          
+          var name = $('strong').text()
+
+          var companyProfile = $('.c58l').html() // target the company profile area
+          var myRegExp = /target="_new">(https?:\/\/?[\da-z\.-]+\.[a-z\.]{2,6}[\/\w \.-]*\/?)<\/a>/
+          var companyUrl = myRegExp.exec(companyProfile)[1] // .exec() and [1] returns the first match group
+          
+          companyInfo.name = name
+          companyInfo.url = companyUrl
+
+          $('dd').each(function(index, item) {
+            companyInfo.categories.push(item.children[0].children[0].data);
+          });
+
+          companyInfo.categories = companyInfo.categories.toString()
+          console.log(companyInfo);
+
+          connection.query('INSERT INTO companies SET ?', companyInfo, function(err, result) {
+                        if (err) {
+                            console.log(err);
+                            return;
+                        }
+        }
+      }
+    }
+  });
 
 console.log("Start Crawling");
-// Queue just one URL, with default callback
-c.queue('https://service.dmexco.de/km_vis-cgi/km_vis/vis/custom/ext2/show_exhibitors.cgi?alpha_index=A_1_20%2CB_3_43%2CC_3_61%2CD_4_523%2CE_4_109%2CF_4_115%2CG_5_571%2CH_5_138%2CI_5_848%2CK_6_160%2CL_6_171%2CM_7_177%2CN_7_600%2CO_8_211%2CP_8_465%2CQ_9_704%2CR_9_779%2CS_9_816%2CT_11_718%2CU_11_306%2CV_11_515%2CW_12_324%2CY_13_336%2CZ_13_566&ticket=k8894901500056&prod_no=01&backto=show_product&leaf=1&i_exh_num=125&to=10&from=0#exh_20');
+
+c.queue('https://service.dmexco.de/km_vis-cgi/km_vis/vis/custom/ext2/show_exhibitors.cgi?ticket=k0013975787261&exh_all=1');
 
 
-// if(firstPage) {
-//     $(".ez_nav_bottom a.listnavpagenum").each(function(index,item) {
-//         if($(item).attr("pagenum") != 1) {
-//             nextCrawlSite = $(item).attr("href");
-//             if (nextCrawlSite!= null) {
-//                 c.queue(nextCrawlSite);
-//                 console.log("Added another listing");
-//             }
-//         }
-//     });
-//     firstPage = false;
-// }
-
-
-
-
-
-// database information
-
-// var dbConfig = {
-//   host     : "127.0.0.1",
-//   port      : "8889",
-//   user     : "ibc",
-//   password : "ibc",
-//   database : "ibc"
-// }
-
-// var connection = mysql.createConnection(dbConfig);
-
-// connection.connect(function(err) {
-//   if (err) {
-//     console.error('error connecting: ' + err.stack);
-//     return;
-//   }
-
-//   console.log('connected as id ' + connection.threadId);
